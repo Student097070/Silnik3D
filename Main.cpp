@@ -1,4 +1,5 @@
 ﻿#include <GLFW/glfw3.h>
+#include <glm.hpp>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -24,6 +25,16 @@ private:
     float projectionMatrix[16];
     float orthoMatrix[16];
     float perspectiveMatrix[16];
+
+    // === KAMERA FPS ===
+    float camX = 0.0f, camY = 1.5f, camZ = 5.0f;
+    float yaw = -90.0f;    // obrót w poziomie
+    float pitch = 0.0f;    // obrót w pionie
+    float moveSpeed = 5.0f;
+    float mouseSensitivity = 0.1f;
+
+    bool firstMouse = true;
+    double lastMouseX = 0.0, lastMouseY = 0.0;
 
     void setIdentityMatrix(float* matrix) {
         for (int i = 0; i < 16; i++) {
@@ -86,10 +97,9 @@ private:
         std::cout << "  [P]       - Przełącz rzutowanie (perspektywiczne/ortogonalne)\n";
         std::cout << "  [F]       - Przełącz pełny ekran/okno\n";
         std::cout << "  [V]       - Włącz/wyłącz VSync\n";
-        std::cout << "  [D]       - Włącz/wyłącz test głębokości (Z-buffer)\n";
+        std::cout << "  [X]       - Włącz/wyłącz test głębokości (Z-buffer)\n";
         std::cout << "  [C]       - Zmień losowy kolor tła\n";
         std::cout << "  [R]       - Resetuj widok (kolor i rzutowanie)\n";
-        std::cout << "  [SPACJA]  - Włącz/wyłącz obrót kamery\n";
         std::cout << "  [↑]/[↓]   - Zwiększ/zmniejsz limit FPS (+/-10)\n";
         std::cout << "\n STEROWANIE MYSZĄ:\ n";
         std::cout << "  [Lewy przycisk]    - Wyświetl pozycję kursora\n";
@@ -152,6 +162,9 @@ public:
         glfwSetScrollCallback(window, scrollCallbackStatic);
         glfwSetFramebufferSizeCallback(window, resizeCallbackStatic);
         glfwSetWindowCloseCallback(window, closeCallbackStatic);
+        glfwSetCursorPosCallback(window, mouseMoveCallbackStatic);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
 
         // Inicjalizacja OpenGL
         glEnable(GL_DEPTH_TEST);
@@ -168,11 +181,10 @@ public:
         std::cout << "  [P]       - Przełącz rzutowanie (perspektywiczne/ortogonalne)\n";
         std::cout << "  [F]       - Przełącz pełny ekran/okno\n";
         std::cout << "  [V]       - Włącz/wyłącz VSync\n";
-        std::cout << "  [D]       - Włącz/wyłącz test głębokości (Z-buffer)\n";
+        std::cout << "  [X]       - Włącz/wyłącz test głębokości (Z-buffer)\n";
         std::cout << "  [C]       - Zmień losowy kolor tła\n";
         std::cout << "  [R]       - Resetuj widok (kolor i rzutowanie)\n";
         std::cout << "  [H]       - Wyświetlanie pomocy\n";
-        std::cout << "  [SPACJA]  - Włącz/wyłącz obrót kamery\n";
         std::cout << "  [↑]/[↓]   - Zwiększ/zmniejsz limit FPS (+/-10)\n";
         std::cout << "\n STEROWANIE MYSZĄ:\ n";
         std::cout << "  [Lewy przycisk]    - Wyświetl pozycję kursora\n";
@@ -389,10 +401,59 @@ public:
                 rotation += 1.0;
                 if (rotation >= 360.0) rotation -= 360.0;
             }
+            float deltaTime = 0.016f; // uproszczone (ok. 60 FPS)
+            //float velocity = moveSpeed * deltaTime;
 
-            glTranslatef(0.0f, 0.0f, -10.0f);
-            glRotatef(rotation * 0.5f, 0.0f, 1.0f, 0.0f);
-            glRotatef(20.0f, 1.0f, 0.0f, 0.0f);
+            float radYaw = yaw * 3.14159f / 180.0f;
+
+            float dirX = cos(radYaw);
+            float dirZ = sin(radYaw);
+            float yawRad = glm::radians(yaw);
+            float pitchRad = glm::radians(pitch);
+
+            // KIERUNEK PATRZENIA (jak lookAt)
+            float forwardX = cos(pitchRad) * cos(yawRad);
+            float forwardY = sin(pitchRad);
+            float forwardZ = cos(pitchRad) * sin(yawRad);
+            float rightX = -sin(yawRad);
+            float rightZ = cos(yawRad);
+
+            float velocity = moveSpeed * deltaTime;
+
+            // PRZÓD
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+                camX += forwardX * velocity;
+                camY += forwardY * velocity;
+                camZ += forwardZ * velocity;
+            }
+
+            // TYŁ
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+                camX -= forwardX * velocity;
+                camY -= forwardY * velocity;
+                camZ -= forwardZ * velocity;
+            }
+
+            // PRAWO
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+                camX += rightX * velocity;
+                camZ += rightZ * velocity;
+            }
+
+            // LEWO
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+                camX -= rightX * velocity;
+                camZ -= rightZ * velocity;
+            }
+
+
+
+            glRotatef(-pitch, 1.0f, 0.0f, 0.0f);
+            glRotatef(-yaw, 0.0f, 1.0f, 0.0f);
+            glTranslatef(-camX, -camY, -camZ);
+
+
+
 
             // Rysowanie obiektów 3D
             drawCube(-2.0f, 0.0f, 0.0f, 1.0f);
@@ -466,6 +527,12 @@ public:
         if (engine) engine->closeCallback();
     }
 
+    static void mouseMoveCallbackStatic(GLFWwindow* window, double xpos, double ypos) {
+        Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
+        if (engine) engine->mouseMoveCallback(xpos, ypos);
+    }
+
+
 private:
     void keyCallback(int key, int action) {
         if (action == GLFW_PRESS || action == GLFW_REPEAT) {
@@ -485,7 +552,7 @@ private:
             case GLFW_KEY_V:
                 toggleVSync();
                 break;
-            case GLFW_KEY_D:
+            case GLFW_KEY_X:
                 toggleDepthTest();
                 break;
             case GLFW_KEY_C:
@@ -501,10 +568,6 @@ private:
                 setClearColor(0.2f, 0.3f, 0.3f, 1.0f);
                 updateProjection();
                 std::cout << "Zresetowano widok" << std::endl;
-                break;
-            case GLFW_KEY_SPACE:
-                rotateCamera = !rotateCamera;  // Poprawione: użycie zmiennej członkowskiej
-                std::cout << "Obrót kamery: " << (rotateCamera ? "Włączony" : "Wyłączony") << std::endl;
                 break;
             case GLFW_KEY_UP:
                 targetFPS += 10;
@@ -554,6 +617,33 @@ private:
     void closeCallback() {
         std::cout << "Zamykanie aplikacji..." << std::endl;
     }
+
+    void mouseMoveCallback(double xpos, double ypos) {
+        if (firstMouse) {
+            lastMouseX = xpos;
+            lastMouseY = ypos;
+            firstMouse = false;
+        }
+
+        float xoffset = lastMouseX - xpos;
+        float yoffset = lastMouseY - ypos;
+
+
+
+        lastMouseX = xpos;
+        lastMouseY = ypos;
+
+        xoffset *= mouseSensitivity;
+        yoffset *= mouseSensitivity;
+
+        yaw += xoffset;
+        pitch += yoffset;
+
+        if (pitch > 89.0f) pitch = 89.0f;
+        if (pitch < -89.0f) pitch = -89.0f;
+    }
+
+
 };
 
 int main() {
