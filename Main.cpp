@@ -9,6 +9,11 @@
 
 using namespace std;
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+
 class Engine {
 private:
     GLFWwindow* window;
@@ -23,6 +28,7 @@ private:
     bool rotateCamera;  // dla trybu statycznego
     bool lightingEnabled;  // czy oświetlenie jest włączone
     bool showAxes;  // czy pokazywać osie współrzędnych
+    bool smoothShading;  // true = Gouraud, false = flat
 
     // Matryca projekcji (uproszczona)
     float projectionMatrix[16];
@@ -40,8 +46,8 @@ private:
 
     // Zmienne dla trybu FPS
     float camX = 0.0f, camY = 0.0f, camZ = 10.0f;
-    float yaw = -90.0f;    
-    float pitch = 0.0f;    
+    float yaw = -90.0f;    // obrót w poziomie
+    float pitch = 0.0f;    // obrót w pionie
     float moveSpeed = 10.0f;
     float mouseSensitivity = 0.1f;
     bool firstMouse = true;
@@ -59,8 +65,14 @@ private:
     // Zmienne dla scrolla myszy (ruch po osi Z)
     float camZScroll = 10.0f;  // Początkowa pozycja na osi Z
     const float scrollSpeed = 1.0f;
-    const float minZ = -50.0f;   
+    const float minZ = -50.0f;
     const float maxZ = 50.0f;
+
+    // Zmienne dla kuli
+    int sphereSegments = 16;  // Bazowa liczba segmentów (60 poligonów ~ 16x16)
+    const int minSegments = 8;   // Minimalna liczba segmentów
+    const int maxSegments = 64;  // Maksymalna liczba segmentów (5x zwiększenie)
+    const int baseSegments = 16; // Bazowa wartość
 
     void setIdentityMatrix(float* matrix) {
         for (int i = 0; i < 16; i++) {
@@ -149,6 +161,10 @@ private:
         std::cout << "  [R]       - Resetuj widok (kolor, rzutowanie, kamerę)\n";
         std::cout << "  [L]       - Włącz/wyłącz oświetlenie\n";
         std::cout << "  [X]       - Pokaż/ukryj osie współrzędnych\n";
+        std::cout << "  [G]       - Przełącz cieniowanie (płaskie/Gouraud)\n";
+        std::cout << "  [T]       - Zwiększ liczbę segmentów kuli (x2)\n";
+        std::cout << "  [Y]       - Zmniejsz liczbę segmentów kuli (/2)\n";
+        std::cout << "  [B]       - Resetuj liczbę segmentów kuli\n";
         std::cout << "  [H]       - Wyświetl pomoc\n";
         std::cout << "  [↑]/[↓]   - Zwiększ/zmniejsz limit FPS (+/-10)\n";
         std::cout << "\nSTEROWANIE MYSZĄ:\n";
@@ -160,19 +176,21 @@ private:
         std::cout << "  Aktualne okno: " << width << "x" << height << "\n";
         std::cout << "  Rzutowanie: " << (isPerspective ? "Perspektywiczne" : "Ortogonalne") << "\n";
         std::cout << "  Tryb: " << (isFullscreen ? "Pełny ekran" : "Okno") << "\n";
-        std::cout << "  VSync: " << (vsyncEnabled ? "Włączony" : "Wyłączony") << "\n";
-        std::cout << "  Test głębokości: " << (depthTestEnabled ? "Włączony" : "Wyłączony") << "\n";
-        std::cout << "  Oświetlenie: " << (lightingEnabled ? "Włączone" : "Wyłączone") << "\n";
-        std::cout << "  Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << "\n";
-        std::cout << "  Pozycja Z: " << camZScroll << "\n";
-        std::cout << "  Celowy FPS: " << targetFPS << "\n";
+        std::cout << "  VSync: " << (vsyncEnabled ? "Włączony" : "Wyłączony") << std::endl;
+        std::cout << "  Test głębokości: " << (depthTestEnabled ? "Włączony" : "Wyłączony") << std::endl;
+        std::cout << "  Oświetlenie: " << (lightingEnabled ? "Włączone" : "Wyłączone") << std::endl;
+        std::cout << "  Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << std::endl;
+        std::cout << "  Cieniowanie: " << (smoothShading ? "Gouraud (smooth)" : "Płaskie (flat)") << std::endl;
+        std::cout << "  Segmenty kuli: " << sphereSegments << " (poligony: ~" << (sphereSegments * sphereSegments * 2) << ")" << std::endl;
+        std::cout << "  Pozycja Z: " << camZScroll << std::endl;
+        std::cout << "  Celowy FPS: " << targetFPS << std::endl;
         std::cout << "  Tryb kamery: ";
         switch (cameraMode) {
         case STATIC_CAMERA: std::cout << "STATYCZNY"; break;
-        case FPS_CAMERA: std::cout << "FPS (WASD + mysz)"; break;
-        case MANUAL_CAMERA: std::cout << "RĘCZNY (klawisze)"; break;
+        case FPS_CAMERA: std::cout << "FPS (W/S=Y, A/D=X, mysz=obrót, scroll=Z)"; break;
+        case MANUAL_CAMERA: std::cout << "RĘCZNY (I/K=Y, J/L=X, U/O=Z)"; break;
         }
-        std::cout << "\n  Obrót kamery: " << (rotateCamera ? "Włączony" : "Wyłączony") << "\n";
+        std::cout << "\n  Obrót kamery: " << (rotateCamera ? "Włączony" : "Wyłączony") << std::endl;
         std::cout << "=============================\n" << std::endl;
     }
 
@@ -262,7 +280,8 @@ public:
         : width(w), height(h), isFullscreen(false), isPerspective(true),
         vsyncEnabled(true), depthTestEnabled(true), targetFPS(60),
         lastFrameTime(0), rotateCamera(false), cameraMode(STATIC_CAMERA),
-        staticRotation(0.0), lightingEnabled(true), showAxes(false) {
+        staticRotation(0.0), lightingEnabled(true), showAxes(false),
+        smoothShading(true), sphereSegments(baseSegments) {
 
         // Inicjalizacja generatora liczb losowych
         srand(static_cast<unsigned>(time(nullptr)));
@@ -317,6 +336,9 @@ public:
 
         // Ustawienie normalnych
         glEnable(GL_NORMALIZE);
+
+        // Domyślnie cieniowanie Gouraud
+        glShadeModel(GL_SMOOTH);
 
         // Inicjalizacja oświetlenia
         setupLighting();
@@ -399,6 +421,49 @@ public:
     void toggleAxes() {
         showAxes = !showAxes;
         std::cout << "Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << std::endl;
+    }
+
+    void toggleShading() {
+        smoothShading = !smoothShading;
+        if (smoothShading) {
+            glShadeModel(GL_SMOOTH);
+            std::cout << "Cieniowanie: Gouraud (smooth)" << std::endl;
+        }
+        else {
+            glShadeModel(GL_FLAT);
+            std::cout << "Cieniowanie: Płaskie (flat)" << std::endl;
+        }
+    }
+
+    // Funkcja do zwiększania liczby segmentów kuli (x2)
+    void increaseSphereDetail() {
+        if (sphereSegments * 2 <= maxSegments) {
+            sphereSegments *= 2;
+            std::cout << "Zwiększono liczbę segmentów kuli: " << sphereSegments;
+            std::cout << " (poligony: ~" << (sphereSegments * sphereSegments * 2) << ")" << std::endl;
+        }
+        else {
+            std::cout << "Osiągnięto maksymalną liczbę segmentów: " << maxSegments << std::endl;
+        }
+    }
+
+    // Funkcja do zmniejszania liczby segmentów kuli (/2)
+    void decreaseSphereDetail() {
+        if (sphereSegments / 2 >= minSegments) {
+            sphereSegments /= 2;
+            std::cout << "Zmniejszono liczbę segmentów kuli: " << sphereSegments;
+            std::cout << " (poligony: ~" << (sphereSegments * sphereSegments * 2) << ")" << std::endl;
+        }
+        else {
+            std::cout << "Osiągnięto minimalną liczbę segmentów: " << minSegments << std::endl;
+        }
+    }
+
+    // Funkcja do resetowania liczby segmentów kuli
+    void resetSphereDetail() {
+        sphereSegments = baseSegments;
+        std::cout << "Zresetowano liczbę segmentów kuli: " << sphereSegments;
+        std::cout << " (poligony: ~" << (sphereSegments * sphereSegments * 2) << ")" << std::endl;
     }
 
     void setTargetFPS(int fps) {
@@ -552,26 +617,90 @@ public:
         glPopMatrix();
     }
 
+    // Funkcja do rysowania kuli
+    void drawSphere(float x, float y, float z, float radius = 1.0f) {
+        glPushMatrix();
+        glTranslatef(x, y, z);
+        glScalef(radius, radius, radius);
+
+        // Dla Gouraud cieniowania ustawiamy różne kolory w wierzchołkach
+        // Dla płaskiego cieniowania cała kula ma jeden kolor
+
+        for (int i = 0; i < sphereSegments; i++) {
+            // Obliczanie szerokości geograficznej
+            float lat0 = (float)M_PI * (-0.5f + (float)i / sphereSegments);
+            float lat1 = (float)M_PI * (-0.5f + (float)(i + 1) / sphereSegments);
+
+            glBegin(GL_QUAD_STRIP);
+            for (int j = 0; j <= sphereSegments; j++) {
+                // Obliczanie długości geograficznej
+                float lng = 2.0f * (float)M_PI * (float)j / sphereSegments;
+
+                // Współrzędne wierzchołka 1
+                float x0 = cos(lat0) * cos(lng);
+                float y0 = sin(lat0);
+                float z0 = cos(lat0) * sin(lng);
+
+                // Współrzędne wierzchołka 2
+                float x1 = cos(lat1) * cos(lng);
+                float y1 = sin(lat1);
+                float z1 = cos(lat1) * sin(lng);
+
+                // Normalne są takie same jak pozycje wierzchołków (dla kuli)
+                glNormal3f(x0, y0, z0);
+
+                if (smoothShading) {
+                    // Gouraud shading - różne kolory w zależności od pozycji
+                    // Kolor zmienia się w zależności od pozycji na kuli
+                    float r = 0.5f + 0.5f * y0;  // Czerwony zależny od wysokości
+                    float g = 0.5f + 0.5f * x0;  // Zielony zależny od x
+                    float b = 0.5f + 0.5f * z0;  // Niebieski zależny od z
+                    glColor3f(r, g, b);
+                }
+                else {
+                    // Flat shading - jednolity kolor dla całej kuli
+                    glColor3f(0.8f, 0.2f, 0.8f); // Fioletowy
+                }
+
+                glVertex3f(x0, y0, z0);
+
+                // Drugi wierzchołek
+                glNormal3f(x1, y1, z1);
+
+                if (smoothShading) {
+                    float r = 0.5f + 0.5f * y1;
+                    float g = 0.5f + 0.5f * x1;
+                    float b = 0.5f + 0.5f * z1;
+                    glColor3f(r, g, b);
+                }
+
+                glVertex3f(x1, y1, z1);
+            }
+            glEnd();
+        }
+
+        glPopMatrix();
+    }
+
     void handleCameraMovement(float deltaTime) {
         if (cameraMode == FPS_CAMERA) {
             // TRYB FPS - W/S = oś Y, A/D = oś X, scroll = oś Z
             float velocity = moveSpeed * deltaTime;
 
-            // W - ruch w górę (oś Y+)
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-                camY += velocity;
+            // Jeśli patrzymy z drugiej strony (camZScroll < 0), odwróć kierunki X
+            if (camZScroll >= 0) {
+                // Normalne sterowanie - przed obiektami
+                if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camY += velocity;
+                if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camY -= velocity;
+                if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camX -= velocity;
+                if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camX += velocity;
             }
-            // S - ruch w dół (oś Y-)
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-                camY -= velocity;
-            }
-            // A - ruch w lewo (oś X-)
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-                camX -= velocity;
-            }
-            // D - ruch w prawo (oś X+)
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-                camX += velocity;
+            else {
+                // Odwrócone sterowanie - za obiektami
+                if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camY += velocity;
+                if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camY -= velocity;
+                if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camX += velocity;  // ODWRÓCONE
+                if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camX -= velocity;  // ODWRÓCONE
             }
         }
         else if (cameraMode == MANUAL_CAMERA) {
@@ -579,21 +708,13 @@ public:
             float velocity = moveSpeed * deltaTime;
 
             // I - ruch w górę (oś Y+)
-            if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
-                camY += velocity;
-            }
+            if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) camY += velocity;
             // K - ruch w dół (oś Y-)
-            if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-                camY -= velocity;
-            }
+            if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) camY -= velocity;
             // J - ruch w lewo (oś X-)
-            if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-                camX -= velocity;
-            }
+            if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) camX -= velocity;
             // L - ruch w prawo (oś X+)
-            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                camX += velocity;
-            }
+            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) camX += velocity;
             // U - ruch do przodu (oś Z-)
             if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) {
                 camZScroll -= velocity;
@@ -671,7 +792,16 @@ public:
             // Ustawienie kamery w zależności od trybu
             if (cameraMode == STATIC_CAMERA) {
                 // TRYB STATYCZNY (domyślny)
-                glTranslatef(0.0f, 0.0f, -camZScroll); // Używamy camZScroll z scrolla
+                // Jeśli camZScroll jest ujemne, oznacza to że jesteśmy ZA obiektami
+                if (camZScroll >= 0) {
+                    // Przed obiektami - standardowy widok
+                    glTranslatef(0.0f, 0.0f, -camZScroll);
+                }
+                else {
+                    // Za obiektami - odwróć widok, aby patrzeć na nie z drugiej strony
+                    glTranslatef(0.0f, 0.0f, -camZScroll);
+                    glRotatef(180.0f, 0.0f, 1.0f, 0.0f); // Obrót 180 stopni aby patrzeć z drugiej strony
+                }
                 glRotatef(staticRotation * 0.5f, 0.0f, 1.0f, 0.0f);
                 glRotatef(20.0f, 1.0f, 0.0f, 0.0f);
             }
@@ -682,8 +812,20 @@ public:
                     glRotatef(-pitch, 1.0f, 0.0f, 0.0f);
                     glRotatef(-yaw, 0.0f, 1.0f, 0.0f);
                 }
-                // Przesuwamy kamerę zgodnie z pozycją X, Y i Z
-                glTranslatef(-camX, -camY, -camZScroll);
+
+                // Jeśli camZScroll jest ujemne, oznacza to że jesteśmy ZA obiektami
+                if (camZScroll >= 0) {
+                    // Przed obiektami
+                    glTranslatef(-camX, -camY, -camZScroll);
+                }
+                else {
+                    // Za obiektami - odwróć widok
+                    glTranslatef(-camX, -camY, -camZScroll);
+                    if (cameraMode != FPS_CAMERA) {
+                        // Dla trybu ręcznego też obracamy kamerę
+                        glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+                    }
+                }
             }
 
             // Aktualizacja pozycji światła (światło jest stałe w przestrzeni świata)
@@ -693,8 +835,9 @@ public:
             drawAxes();
 
             // Rysowanie obiektów 3D z oświetleniem
-            drawCube(-2.0f, 0.0f, 0.0f, 1.0f);
-            drawPyramid(2.0f, 0.0f, 0.0f, 1.5f);
+            drawCube(-4.0f, 0.0f, 0.0f, 1.0f);
+            drawPyramid(0.0f, 0.0f, 0.0f, 1.5f);
+            drawSphere(4.0f, 0.0f, 0.0f, 1.5f);
 
             // Rysowanie siatki referencyjnej (bez oświetlenia)
             glDisable(GL_LIGHTING);
@@ -798,6 +941,7 @@ private:
                 isPerspective = true;
                 updateProjection();
                 resetCamera();
+                resetSphereDetail(); // Resetuj też detale kuli
                 std::cout << "Zresetowano widok" << std::endl;
                 break;
             case GLFW_KEY_SPACE:
@@ -830,6 +974,18 @@ private:
                 break;
             case GLFW_KEY_X:
                 toggleAxes();
+                break;
+            case GLFW_KEY_G:
+                toggleShading();
+                break;
+            case GLFW_KEY_T:
+                increaseSphereDetail();
+                break;
+            case GLFW_KEY_Y:
+                decreaseSphereDetail();
+                break;
+            case GLFW_KEY_B:
+                resetSphereDetail();
                 break;
             }
         }
@@ -889,7 +1045,8 @@ private:
             xoffset *= mouseSensitivity;
             yoffset *= mouseSensitivity;
 
-            yaw -= xoffset;
+            // ODWRÓCENIE KIERUNKU NA OSI X
+            yaw -= xoffset;  // ZMIENIONE: było yaw += xoffset;
             pitch += yoffset;
 
             // Ograniczenie pitch żeby nie przewrócić kamery
