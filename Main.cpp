@@ -1,5 +1,6 @@
 ﻿#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -20,6 +21,8 @@ private:
     int targetFPS;
     double lastFrameTime;
     bool rotateCamera;  // dla trybu statycznego
+    bool lightingEnabled;  // czy oświetlenie jest włączone
+    bool showAxes;  // czy pokazywać osie współrzędnych
 
     // Matryca projekcji (uproszczona)
     float projectionMatrix[16];
@@ -37,8 +40,8 @@ private:
 
     // Zmienne dla trybu FPS
     float camX = 0.0f, camY = 0.0f, camZ = 10.0f;
-    float yaw = -90.0f;    // obrót w poziomie
-    float pitch = 0.0f;    // obrót w pionie
+    float yaw = -90.0f;    
+    float pitch = 0.0f;    
     float moveSpeed = 10.0f;
     float mouseSensitivity = 0.1f;
     bool firstMouse = true;
@@ -46,6 +49,18 @@ private:
 
     // Zmienne dla trybu statycznego
     double staticRotation = 0.0;
+
+    // Pozycja światła (światło kierunkowe)
+    float lightPosition[4] = { -5.0f, 10.0f, 5.0f, 0.0f }; // pozycja (ostatnia 0.0 = światło kierunkowe)
+    float lightAmbient[4] = { 0.2f, 0.2f, 0.2f, 1.0f };    // światło otoczenia
+    float lightDiffuse[4] = { 0.8f, 0.8f, 0.8f, 1.0f };    // światło rozproszone
+    float lightSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // światło odbite
+
+    // Zmienne dla scrolla myszy (ruch po osi Z)
+    float camZScroll = 10.0f;  // Początkowa pozycja na osi Z
+    const float scrollSpeed = 1.0f;
+    const float minZ = -50.0f;   
+    const float maxZ = 50.0f;
 
     void setIdentityMatrix(float* matrix) {
         for (int i = 0; i < 16; i++) {
@@ -114,12 +129,16 @@ private:
             std::cout << "  [SPACJA]  - Włącz/wyłącz obrót kamery\n";
         }
         else if (cameraMode == FPS_CAMERA) {
-            std::cout << "  [W/A/S/D] - Ruch kamery (przód/lewo/tył/prawo)\n";
-            std::cout << "  [Mysz]    - Rozglądanie się\n";
+            std::cout << "  [W/S]     - Ruch kamery po osi Y (góra/dół)\n";
+            std::cout << "  [A/D]     - Ruch kamery po osi X (lewo/prawo)\n";
+            std::cout << "  [Mysz]    - Rozglądanie się (obrót kamery)\n";
+            std::cout << "  [Kółko myszy] - Ruch po osi Z (przód/tył)\n";
         }
         else if (cameraMode == MANUAL_CAMERA) {
-            std::cout << "  [I/K/J/L] - Ruch kamery (przód/tył/lewo/prawo)\n";
-            std::cout << "  [U/O]     - Ruch góra/dół\n";
+            std::cout << "  [I/K]     - Ruch po osi Y (góra/dół)\n";
+            std::cout << "  [J/L]     - Ruch po osi X (lewo/prawo)\n";
+            std::cout << "  [U/O]     - Ruch po osi Z (przód/tył)\n";
+            std::cout << "  [Kółko myszy] - Ruch po osi Z (przód/tył)\n";
         }
 
         std::cout << "  [P]       - Przełącz rzutowanie (perspektywiczne/ortogonalne)\n";
@@ -128,19 +147,24 @@ private:
         std::cout << "  [D]       - Włącz/wyłącz test głębokości (Z-buffer)\n";
         std::cout << "  [C]       - Zmień losowy kolor tła\n";
         std::cout << "  [R]       - Resetuj widok (kolor, rzutowanie, kamerę)\n";
+        std::cout << "  [L]       - Włącz/wyłącz oświetlenie\n";
+        std::cout << "  [X]       - Pokaż/ukryj osie współrzędnych\n";
         std::cout << "  [H]       - Wyświetl pomoc\n";
         std::cout << "  [↑]/[↓]   - Zwiększ/zmniejsz limit FPS (+/-10)\n";
         std::cout << "\nSTEROWANIE MYSZĄ:\n";
         std::cout << "  [Lewy przycisk]    - Wyświetl pozycję kursora\n";
         std::cout << "  [Prawy przycisk]   - Wyświetl pozycję kursora\n";
         std::cout << "  [Środkowy przycisk]- Wyświetl pozycję kursora\n";
-        std::cout << "  [Kółko myszy]      - Wyświetl przesunięcie\n";
+        std::cout << "  [Kółko myszy]      - Ruch po osi Z (przód/tył)\n";
         std::cout << "\nINFORMACJE:\n";
         std::cout << "  Aktualne okno: " << width << "x" << height << "\n";
         std::cout << "  Rzutowanie: " << (isPerspective ? "Perspektywiczne" : "Ortogonalne") << "\n";
         std::cout << "  Tryb: " << (isFullscreen ? "Pełny ekran" : "Okno") << "\n";
         std::cout << "  VSync: " << (vsyncEnabled ? "Włączony" : "Wyłączony") << "\n";
         std::cout << "  Test głębokości: " << (depthTestEnabled ? "Włączony" : "Wyłączony") << "\n";
+        std::cout << "  Oświetlenie: " << (lightingEnabled ? "Włączone" : "Wyłączone") << "\n";
+        std::cout << "  Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << "\n";
+        std::cout << "  Pozycja Z: " << camZScroll << "\n";
         std::cout << "  Celowy FPS: " << targetFPS << "\n";
         std::cout << "  Tryb kamery: ";
         switch (cameraMode) {
@@ -152,12 +176,93 @@ private:
         std::cout << "=============================\n" << std::endl;
     }
 
+    void setupLighting() {
+        if (lightingEnabled) {
+            glEnable(GL_LIGHTING);
+            glEnable(GL_LIGHT0);
+
+            // Ustawienie parametrów światła
+            glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+            glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
+            glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpecular);
+
+            // Włącz kolorowanie materiałów
+            glEnable(GL_COLOR_MATERIAL);
+            glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+
+            // Ustawienie właściwości materiału (dla odbić)
+            float mat_specular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+            float mat_shininess[] = { 50.0f };
+            glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+            glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+        }
+        else {
+            glDisable(GL_LIGHTING);
+            glDisable(GL_LIGHT0);
+        }
+    }
+
+    // Funkcja do rysowania osi współrzędnych (tylko jeśli showAxes = true)
+    void drawAxes() {
+        if (!showAxes) return;
+
+        glDisable(GL_LIGHTING); // Wyłącz oświetlenie dla osi
+
+        glLineWidth(3.0f); // Grubsze linie dla lepszej widoczności
+
+        glBegin(GL_LINES);
+
+        // Oś X - CZERWONA
+        glColor3f(1.0f, 0.0f, 0.0f); // Czerwony
+        glVertex3f(-10.0f, 0.0f, 0.0f);
+        glVertex3f(10.0f, 0.0f, 0.0f);
+
+        // Oś Y - ZIELONA
+        glColor3f(0.0f, 1.0f, 0.0f); // Zielony
+        glVertex3f(0.0f, -10.0f, 0.0f);
+        glVertex3f(0.0f, 10.0f, 0.0f);
+
+        // Oś Z - NIEBIESKA
+        glColor3f(0.0f, 0.0f, 1.0f); // Niebieski
+        glVertex3f(0.0f, 0.0f, -10.0f);
+        glVertex3f(0.0f, 0.0f, 10.0f);
+
+        glEnd();
+
+        // Dodaj strzałki na końcach osi
+        glPointSize(8.0f);
+        glBegin(GL_POINTS);
+        // Strzałka X+
+        glColor3f(1.0f, 0.0f, 0.0f);
+        glVertex3f(10.0f, 0.0f, 0.0f);
+        // Strzałka X-
+        glVertex3f(-10.0f, 0.0f, 0.0f);
+        // Strzałka Y+
+        glColor3f(0.0f, 1.0f, 0.0f);
+        glVertex3f(0.0f, 10.0f, 0.0f);
+        // Strzałka Y-
+        glVertex3f(0.0f, -10.0f, 0.0f);
+        // Strzałka Z+
+        glColor3f(0.0f, 0.0f, 1.0f);
+        glVertex3f(0.0f, 0.0f, 10.0f);
+        // Strzałka Z-
+        glVertex3f(0.0f, 0.0f, -10.0f);
+        glEnd();
+
+        glLineWidth(1.0f); // Przywróć domyślną grubość linii
+
+        if (lightingEnabled) {
+            glEnable(GL_LIGHTING);
+        }
+    }
+
 public:
     Engine(int w = 800, int h = 600, const char* title = "3D Engine")
         : width(w), height(h), isFullscreen(false), isPerspective(true),
         vsyncEnabled(true), depthTestEnabled(true), targetFPS(60),
         lastFrameTime(0), rotateCamera(false), cameraMode(STATIC_CAMERA),
-        staticRotation(0.0) {
+        staticRotation(0.0), lightingEnabled(true), showAxes(false) {
 
         // Inicjalizacja generatora liczb losowych
         srand(static_cast<unsigned>(time(nullptr)));
@@ -209,6 +314,12 @@ public:
         glDepthFunc(GL_LESS);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
+
+        // Ustawienie normalnych
+        glEnable(GL_NORMALIZE);
+
+        // Inicjalizacja oświetlenia
+        setupLighting();
 
         // Inicjalizacja macierzy projekcji
         updateProjection();
@@ -279,6 +390,17 @@ public:
         std::cout << "Test głębokości: " << (depthTestEnabled ? "Włączony" : "Wyłączony") << std::endl;
     }
 
+    void toggleLighting() {
+        lightingEnabled = !lightingEnabled;
+        setupLighting();
+        std::cout << "Oświetlenie: " << (lightingEnabled ? "Włączone" : "Wyłączone") << std::endl;
+    }
+
+    void toggleAxes() {
+        showAxes = !showAxes;
+        std::cout << "Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << std::endl;
+    }
+
     void setTargetFPS(int fps) {
         targetFPS = fps;
         std::cout << "Celowa liczba FPS: " << targetFPS << std::endl;
@@ -300,14 +422,27 @@ public:
         }
     }
 
+    // Funkcja do obsługi scrolla myszy (ruch po osi Z)
+    void handleMouseScroll(float yoffset) {
+        camZScroll += yoffset * scrollSpeed;
+
+        // Ograniczenie wartości na osi Z
+        if (camZScroll < minZ) camZScroll = minZ;
+        if (camZScroll > maxZ) camZScroll = maxZ;
+
+        std::cout << "Pozycja Z: " << camZScroll << std::endl;
+    }
+
     void drawCube(float x, float y, float z, float size = 1.0f) {
         glPushMatrix();
         glTranslatef(x, y, z);
         glScalef(size, size, size);
 
+        // Ustawienie normalnych dla każdej ściany
         glBegin(GL_QUADS);
 
         // Przód (niebieski)
+        glNormal3f(0.0f, 0.0f, 1.0f);
         glColor3f(0.0f, 0.0f, 1.0f);
         glVertex3f(-0.5f, -0.5f, 0.5f);
         glVertex3f(0.5f, -0.5f, 0.5f);
@@ -315,6 +450,7 @@ public:
         glVertex3f(-0.5f, 0.5f, 0.5f);
 
         // Tył (zielony)
+        glNormal3f(0.0f, 0.0f, -1.0f);
         glColor3f(0.0f, 1.0f, 0.0f);
         glVertex3f(-0.5f, -0.5f, -0.5f);
         glVertex3f(-0.5f, 0.5f, -0.5f);
@@ -322,6 +458,7 @@ public:
         glVertex3f(0.5f, -0.5f, -0.5f);
 
         // Góra (żółty)
+        glNormal3f(0.0f, 1.0f, 0.0f);
         glColor3f(1.0f, 1.0f, 0.0f);
         glVertex3f(-0.5f, 0.5f, -0.5f);
         glVertex3f(-0.5f, 0.5f, 0.5f);
@@ -329,6 +466,7 @@ public:
         glVertex3f(0.5f, 0.5f, -0.5f);
 
         // Dół (czerwony)
+        glNormal3f(0.0f, -1.0f, 0.0f);
         glColor3f(1.0f, 0.0f, 0.0f);
         glVertex3f(-0.5f, -0.5f, -0.5f);
         glVertex3f(0.5f, -0.5f, -0.5f);
@@ -336,6 +474,7 @@ public:
         glVertex3f(-0.5f, -0.5f, 0.5f);
 
         // Lewo (cyjan)
+        glNormal3f(-1.0f, 0.0f, 0.0f);
         glColor3f(0.0f, 1.0f, 1.0f);
         glVertex3f(-0.5f, -0.5f, -0.5f);
         glVertex3f(-0.5f, -0.5f, 0.5f);
@@ -343,6 +482,7 @@ public:
         glVertex3f(-0.5f, 0.5f, -0.5f);
 
         // Prawo (magenta)
+        glNormal3f(1.0f, 0.0f, 0.0f);
         glColor3f(1.0f, 0.0f, 1.0f);
         glVertex3f(0.5f, -0.5f, -0.5f);
         glVertex3f(0.5f, 0.5f, -0.5f);
@@ -359,38 +499,53 @@ public:
         glTranslatef(x, y, z);
         glScalef(size, size, size);
 
+        // Ustawienie normalnych dla każdej ściany
         glBegin(GL_TRIANGLES);
 
-        // Podstawa
-        glColor3f(1.0f, 0.5f, 0.0f);
+        // Podstawa piramidy (2 trójkąty tworzące kwadrat)
+        glNormal3f(0.0f, -1.0f, 0.0f); // Normalna skierowana w dół
+
+        // Pierwszy trójkąt podstawy
+        glColor3f(1.0f, 0.5f, 0.0f); // Pomarańczowy
         glVertex3f(-0.5f, -0.5f, -0.5f);
         glVertex3f(0.5f, -0.5f, -0.5f);
         glVertex3f(0.5f, -0.5f, 0.5f);
 
+        // Drugi trójkąt podstawy
+        glColor3f(1.0f, 0.6f, 0.2f); // Jaśniejszy pomarańczowy
         glVertex3f(-0.5f, -0.5f, -0.5f);
         glVertex3f(0.5f, -0.5f, 0.5f);
         glVertex3f(-0.5f, -0.5f, 0.5f);
 
-        // Ściany boczne
-        glColor3f(0.0f, 0.8f, 0.8f);
+        // Ściany boczne piramidy (4 trójkąty)
+
+        // Przód (niebieski)
+        glNormal3f(0.0f, 0.447f, 0.894f);
+        glColor3f(0.0f, 0.0f, 1.0f);
         glVertex3f(0.0f, 0.5f, 0.0f);
-        glVertex3f(-0.5f, -0.5f, -0.5f);
+        glVertex3f(-0.5f, -0.5f, 0.5f);
+        glVertex3f(0.5f, -0.5f, 0.5f);
+
+        // Tył (zielony)
+        glNormal3f(0.0f, 0.447f, -0.894f);
+        glColor3f(0.0f, 1.0f, 0.0f);
+        glVertex3f(0.0f, 0.5f, 0.0f);
         glVertex3f(0.5f, -0.5f, -0.5f);
-
-        glColor3f(0.8f, 0.8f, 0.0f);
-        glVertex3f(0.0f, 0.5f, 0.0f);
-        glVertex3f(0.5f, -0.5f, -0.5f);
-        glVertex3f(0.5f, -0.5f, 0.5f);
-
-        glColor3f(0.8f, 0.0f, 0.8f);
-        glVertex3f(0.0f, 0.5f, 0.0f);
-        glVertex3f(0.5f, -0.5f, 0.5f);
-        glVertex3f(-0.5f, -0.5f, 0.5f);
-
-        glColor3f(0.0f, 0.8f, 0.0f);
-        glVertex3f(0.0f, 0.5f, 0.0f);
-        glVertex3f(-0.5f, -0.5f, 0.5f);
         glVertex3f(-0.5f, -0.5f, -0.5f);
+
+        // Lewo (żółty)
+        glNormal3f(-0.894f, 0.447f, 0.0f);
+        glColor3f(1.0f, 1.0f, 0.0f);
+        glVertex3f(0.0f, 0.5f, 0.0f);
+        glVertex3f(-0.5f, -0.5f, -0.5f);
+        glVertex3f(-0.5f, -0.5f, 0.5f);
+
+        // Prawo (czerwony)
+        glNormal3f(0.894f, 0.447f, 0.0f);
+        glColor3f(1.0f, 0.0f, 0.0f);
+        glVertex3f(0.0f, 0.5f, 0.0f);
+        glVertex3f(0.5f, -0.5f, 0.5f);
+        glVertex3f(0.5f, -0.5f, -0.5f);
 
         glEnd();
 
@@ -399,73 +554,55 @@ public:
 
     void handleCameraMovement(float deltaTime) {
         if (cameraMode == FPS_CAMERA) {
-            // TRYB FPS (mysz + WASD)
+            // TRYB FPS - W/S = oś Y, A/D = oś X, scroll = oś Z
             float velocity = moveSpeed * deltaTime;
 
-            // Obliczenie kierunku patrzenia
-            float yawRad = glm::radians(yaw);
-            float pitchRad = glm::radians(pitch);
-
-            float forwardX = cos(pitchRad) * cos(yawRad);
-            float forwardY = sin(pitchRad);
-            float forwardZ = cos(pitchRad) * sin(yawRad);
-
-            float rightX = -sin(yawRad);
-            float rightZ = cos(yawRad);
-
-            // PRZÓD (W)
+            // W - ruch w górę (oś Y+)
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-                camX += forwardX * velocity;
-                camY += forwardY * velocity;
-                camZ += forwardZ * velocity;
+                camY += velocity;
             }
-
-            // TYŁ (S)
+            // S - ruch w dół (oś Y-)
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-                camX -= forwardX * velocity;
-                camY -= forwardY * velocity;
-                camZ -= forwardZ * velocity;
+                camY -= velocity;
             }
-
-            // PRAWO (D)
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-                camX += rightX * velocity;
-                camZ += rightZ * velocity;
-            }
-
-            // LEWO (A)
+            // A - ruch w lewo (oś X-)
             if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-                camX -= rightX * velocity;
-                camZ -= rightZ * velocity;
+                camX -= velocity;
+            }
+            // D - ruch w prawo (oś X+)
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+                camX += velocity;
             }
         }
         else if (cameraMode == MANUAL_CAMERA) {
             // RĘCZNY TRYB STEROWANIA KAMERĄ
             float velocity = moveSpeed * deltaTime;
 
-            // Przód (I) - ruch w kierunku -Z
+            // I - ruch w górę (oś Y+)
             if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
-                camZ -= velocity;
+                camY += velocity;
             }
-            // Tył (K) - ruch w kierunku +Z
+            // K - ruch w dół (oś Y-)
             if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-                camZ += velocity;
+                camY -= velocity;
             }
-            // Lewo (J) - ruch w kierunku -X
+            // J - ruch w lewo (oś X-)
             if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
                 camX -= velocity;
             }
-            // Prawo (L) - ruch w kierunku +X
+            // L - ruch w prawo (oś X+)
             if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
                 camX += velocity;
             }
-            // Góra (U) - ruch w kierunku +Y
+            // U - ruch do przodu (oś Z-)
             if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) {
-                camY += velocity;
+                camZScroll -= velocity;
+                if (camZScroll < minZ) camZScroll = minZ;
             }
-            // Dół (O) - ruch w kierunku -Y
+            // O - ruch do tyłu (oś Z+)
             if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-                camY -= velocity;
+                camZScroll += velocity;
+                if (camZScroll > maxZ) camZScroll = maxZ;
             }
         }
     }
@@ -476,7 +613,7 @@ public:
         if (cameraMode == FPS_CAMERA) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             firstMouse = true;
-            std::cout << "TRYB KAMERY: FPS (WASD + mysz)" << std::endl;
+            std::cout << "TRYB KAMERY: FPS (W/S=Y, A/D=X, mysz=obrót, scroll=Z)" << std::endl;
         }
         else {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -484,7 +621,7 @@ public:
                 std::cout << "TRYB KAMERY: STATYCZNY (obrót: SPACJA)" << std::endl;
             }
             else {
-                std::cout << "TRYB KAMERY: RĘCZNY (klawisze I/K/J/L/U/O)" << std::endl;
+                std::cout << "TRYB KAMERY: RĘCZNY (I/K=Y, J/L=X, U/O=Z)" << std::endl;
             }
         }
     }
@@ -493,7 +630,7 @@ public:
         // Reset pozycji i rotacji kamery
         camX = 0.0f;
         camY = 0.0f;
-        camZ = 10.0f;
+        camZScroll = 10.0f;
         yaw = -90.0f;
         pitch = 0.0f;
         staticRotation = 0.0;
@@ -501,6 +638,7 @@ public:
         cameraMode = STATIC_CAMERA;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         std::cout << "Kamera zresetowana do pozycji domyślnej" << std::endl;
+        std::cout << "Pozycja Z zresetowana do 10.0" << std::endl;
     }
 
     void run() {
@@ -533,7 +671,7 @@ public:
             // Ustawienie kamery w zależności od trybu
             if (cameraMode == STATIC_CAMERA) {
                 // TRYB STATYCZNY (domyślny)
-                glTranslatef(0.0f, 0.0f, -10.0f);
+                glTranslatef(0.0f, 0.0f, -camZScroll); // Używamy camZScroll z scrolla
                 glRotatef(staticRotation * 0.5f, 0.0f, 1.0f, 0.0f);
                 glRotatef(20.0f, 1.0f, 0.0f, 0.0f);
             }
@@ -544,14 +682,22 @@ public:
                     glRotatef(-pitch, 1.0f, 0.0f, 0.0f);
                     glRotatef(-yaw, 0.0f, 1.0f, 0.0f);
                 }
-                glTranslatef(-camX, -camY, -camZ);
+                // Przesuwamy kamerę zgodnie z pozycją X, Y i Z
+                glTranslatef(-camX, -camY, -camZScroll);
             }
 
-            // Rysowanie obiektów 3D
+            // Aktualizacja pozycji światła (światło jest stałe w przestrzeni świata)
+            glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+
+            // Rysowanie osi współrzędnych (jeśli włączone)
+            drawAxes();
+
+            // Rysowanie obiektów 3D z oświetleniem
             drawCube(-2.0f, 0.0f, 0.0f, 1.0f);
             drawPyramid(2.0f, 0.0f, 0.0f, 1.5f);
 
-            // Rysowanie siatki referencyjnej
+            // Rysowanie siatki referencyjnej (bez oświetlenia)
+            glDisable(GL_LIGHTING);
             glBegin(GL_LINES);
             glColor3f(0.5f, 0.5f, 0.5f);
             for (int i = -5; i <= 5; i++) {
@@ -562,21 +708,11 @@ public:
             }
             glEnd();
 
-            // Osie współrzędnych
-            glBegin(GL_LINES);
-            // Oś X (czerwona)
-            glColor3f(1.0f, 0.0f, 0.0f);
-            glVertex3f(0.0f, 0.0f, 0.0f);
-            glVertex3f(3.0f, 0.0f, 0.0f);
-            // Oś Y (zielona)
-            glColor3f(0.0f, 1.0f, 0.0f);
-            glVertex3f(0.0f, 0.0f, 0.0f);
-            glVertex3f(0.0f, 3.0f, 0.0f);
-            // Oś Z (niebieska)
-            glColor3f(0.0f, 0.0f, 1.0f);
-            glVertex3f(0.0f, 0.0f, 0.0f);
-            glVertex3f(0.0f, 0.0f, 3.0f);
-            glEnd();
+            // Włącz oświetlenie z powrotem jeśli było włączone
+            if (lightingEnabled) {
+                glEnable(GL_LIGHTING);
+                glEnable(GL_LIGHT0);
+            }
 
             // Zamiana buforów
             glfwSwapBuffers(window);
@@ -689,6 +825,12 @@ private:
             case GLFW_KEY_3:
                 setCameraMode(MANUAL_CAMERA);
                 break;
+            case GLFW_KEY_L:
+                toggleLighting();
+                break;
+            case GLFW_KEY_X:
+                toggleAxes();
+                break;
             }
         }
     }
@@ -713,7 +855,7 @@ private:
     }
 
     void scrollCallback(double xoffset, double yoffset) {
-        std::cout << "Kółko myszy: x=" << xoffset << ", y=" << yoffset << std::endl;
+        handleMouseScroll(static_cast<float>(-yoffset)); // Odwracamy kierunek dla intuicyjności
     }
 
     void resizeCallback(int w, int h) {
@@ -735,6 +877,7 @@ private:
                 lastMouseX = xpos;
                 lastMouseY = ypos;
                 firstMouse = false;
+                return;
             }
 
             float xoffset = static_cast<float>(xpos - lastMouseX);
@@ -746,7 +889,7 @@ private:
             xoffset *= mouseSensitivity;
             yoffset *= mouseSensitivity;
 
-            yaw += xoffset;
+            yaw -= xoffset;
             pitch += yoffset;
 
             // Ograniczenie pitch żeby nie przewrócić kamery
