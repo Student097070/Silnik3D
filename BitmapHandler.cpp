@@ -1,16 +1,31 @@
 #include "BitmapHandler.h"
 
-// Implementacja biblioteki musi byæ w pliku .cpp
+/**
+ * @brief Implementacja biblioteki stb_image.
+ */
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+ /**
+  * @brief Konstruktor klasy BitmapHandler.
+  */
 BitmapHandler::BitmapHandler()
-    : data(nullptr), width(0), height(0), channels(0) {}
+    : data(nullptr), width(0), height(0), channels(0) {
+}
 
+/**
+ * @brief Destruktor klasy BitmapHandler.
+ */
 BitmapHandler::~BitmapHandler() {
     Free();
 }
 
+/**
+ * @brief Wczytuje plik graficzny do pamiêci.
+ * @param filePath Œcie¿ka do pliku obrazu.
+ * @param flipY Czy odwróciæ obraz w osi Y.
+ * @return True jeœli wczytanie siê powiod³o.
+ */
 bool BitmapHandler::Load(const std::string& filePath, bool flipY) {
     // Upewniamy siê, ¿e poprzednie dane zosta³y wyczyszczone
     Free();
@@ -33,6 +48,9 @@ bool BitmapHandler::Load(const std::string& filePath, bool flipY) {
     return true;
 }
 
+/**
+ * @brief Zwalnia pamiêæ zajêt¹ przez obraz.
+ */
 void BitmapHandler::Free() {
     if (data) {
         stbi_image_free(data);

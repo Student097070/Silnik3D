@@ -1,4 +1,22 @@
-﻿#include <GLFW/glfw3.h>
+﻿/**
+
+@file main.cpp
+
+@brief Prosty silnik 3D oparty o OpenGL (fixed pipeline) i GLFW.
+
+
+Plik zawiera implementację klasy Engine (silnik renderujący)
+
+oraz klasy Player odpowiedzialnej za kamerę, oświetlenie
+
+i interakcję użytkownika.
+
+
+@author Jakub Kukuła, Mateusz Kotusiewicz, Filip Wolański, Oskar Kryński
+
+@date 2026 */
+
+#include <GLFW/glfw3.h>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -18,55 +36,73 @@ GLuint myTexture; // Globalny identyfikator tekstury
 
 
 
-// ============== KLASA PLAYER ==============
+
+/**
+ * @class Player
+ * @brief Klasa reprezentująca gracza/kamerę w silniku.
+ *
+ * Odpowiada za:
+ * - sterowanie kamerą (statyczna, FPS, ręczna),
+ * - obsługę wejścia (klawiatura, mysz),
+ * - oświetlenie sceny,
+ * - tryby cieniowania,
+ * - rysowanie osi świata.
+ */
 class Player {
 public:
-    // === KAMERA ===
+    /**
+     * @enum CameraMode
+     * @brief Dostępne tryby pracy kamery.
+     */
     enum CameraMode {
-        STATIC_CAMERA,    // Domyślny tryb z obrotem
-        FPS_CAMERA,       // Tryb FPS (WASD + mysz)
-        MANUAL_CAMERA     // Tryb ręczny (klawisze I/K/J/L/U/O)
+        STATIC_CAMERA,    /**< Kamera statyczna z opcjonalnym obrotem */
+        FPS_CAMERA,       /**< Kamera FPS (WASD + mysz) */
+        MANUAL_CAMERA     /**< Kamera sterowana klawiszami */
     };
 
 
 private:
-    // === KAMERA ===
-
+    /// Aktualny tryb kamery
     CameraMode cameraMode;
+    /// Wskaźnik do okna GLFW
     GLFWwindow* window;
 
     // Zmienne dla trybu FPS
     float camX = 0.0f, camY = 0.0f, camZ = 10.0f;
-    float yaw = -90.0f;    // obrót w poziomie
-    float pitch = 0.0f;    // obrót w pionie
-    float moveSpeed = 10.0f;
-    float mouseSensitivity = 0.1f;
-    bool firstMouse = true;
-    double lastMouseX = 0.0, lastMouseY = 0.0;
+    float yaw = -90.0f;                         ///< Obrót w osi Y (lewo/prawo)
+    float pitch = 0.0f;                         ///< Obrót w osi X (góra/dół)
+    float moveSpeed = 10.0f;                    ///< Prędkość poruszania kamery
+    float mouseSensitivity = 0.1f;              ///< Czułość myszy
+    bool firstMouse = true;                     ///< Flaga pierwszego ruchu myszy
+    double lastMouseX = 0.0, lastMouseY = 0.0;  
 
     // Zmienne dla trybu statycznego
-    double staticRotation = 0.0;
-    bool rotateCamera = false;
+    double staticRotation = 0.0;                ///< Kąt obrotu kamery
+    bool rotateCamera = false;                  ///< Czy kamera się obraca
 
     // Zmienne dla scrolla myszy
-    float camZScroll = 10.0f;
-    const float scrollSpeed = 1.0f;
-    const float minZ = -50.0f;
-    const float maxZ = 50.0f;
+    float camZScroll = 10.0f;                   ///< Pozycja kamery w osi Z                      
+    const float scrollSpeed = 1.0f;             ///< Prędkość scrolla
+    const float minZ = -50.0f;                  ///< Minimalna wartość Z   
+    const float maxZ = 50.0f;                   ///< Maksymalna wartość Z
 
     // === OŚWIETLENIE ===
-    bool lightingEnabled;
-    bool shadowsEnabled;  // dla przyszłych implementacji cieni
-    bool smoothShading;
-    float lightPosition[4];
-    float lightAmbient[4];
-    float lightDiffuse[4];
-    float lightSpecular[4];
+    bool lightingEnabled;     ///< Czy oświetlenie jest włączone
+    bool shadowsEnabled;      ///< Flaga cieni (na przyszłość)
+    bool smoothShading;       ///< Tryb cieniowania
+    float lightPosition[4];   ///< Pozycja światła
+    float lightAmbient[4];    ///< Składnik ambient
+    float lightDiffuse[4];    ///< Składnik diffuse
+    float lightSpecular[4];   ///< Składnik specular
 
     // === INNE ===
-    bool showAxes;
+    bool showAxes;                ///< Czy osie świata są widoczne
 
 public:
+    /**
+     * @brief Konstruktor klasy Player.
+     * @param win Wskaźnik do okna GLFW.
+     */
     Player(GLFWwindow* win) : window(win) {
         cameraMode = STATIC_CAMERA;
         rotateCamera = false;
@@ -93,6 +129,10 @@ public:
     }
 
     // === METODY KAMERY ===
+     /**
+     * @brief Ustawia tryb kamery.
+     * @param mode Wybrany tryb kamery.
+     */
     void setCameraMode(CameraMode mode) {
         cameraMode = mode;
 
@@ -111,7 +151,10 @@ public:
             }
         }
     }
-
+    /**
+     * @brief Obsługuje ruch kamery w zależności od trybu.
+     * @param deltaTime Czas między klatkami.
+     */
     void handleCameraMovement(float deltaTime) {
         if (cameraMode == FPS_CAMERA) {
             float velocity = moveSpeed * deltaTime;
@@ -148,7 +191,10 @@ public:
             }
         }
     }
-
+    /**
+     * @brief Aktualizuje obrót kamery statycznej.
+     * @param deltaTime Czas między klatkami.
+     */
     void updateStaticRotation(float deltaTime) {
         if (cameraMode == STATIC_CAMERA && rotateCamera) {
             staticRotation += deltaTime * 30.0f; // 30 stopni na sekundę
@@ -156,6 +202,9 @@ public:
         }
     }
 
+    /**
+     * @brief Nakłada transformacje kamery na macierz widoku.
+     */
     void applyCameraTransform() {
         glLoadIdentity();
 
@@ -187,7 +236,11 @@ public:
             }
         }
     }
-
+    /**
+    * @brief Obsługuje ruch myszy (FPS).
+    * @param xpos Pozycja X kursora.
+    * @param ypos Pozycja Y kursora.
+    */
     void handleMouseMove(double xpos, double ypos) {
         if (cameraMode == FPS_CAMERA) {
             if (firstMouse) {
@@ -213,21 +266,28 @@ public:
             if (pitch < -89.0f) pitch = -89.0f;
         }
     }
-
+    /**
+     * @brief Obsługuje scroll myszy.
+     * @param yoffset Przesunięcie scrolla.
+     */
     void handleMouseScroll(float yoffset) {
         camZScroll += yoffset * scrollSpeed;
         if (camZScroll < minZ) camZScroll = minZ;
         if (camZScroll > maxZ) camZScroll = maxZ;
         std::cout << "Pozycja Z: " << camZScroll << std::endl;
     }
-
+    /**
+    * @brief Włącza/wyłącza obrót kamery statycznej.
+    */
     void toggleRotation() {
         if (cameraMode == STATIC_CAMERA) {
             rotateCamera = !rotateCamera;
             std::cout << "Obrót kamery: " << (rotateCamera ? "Włączony" : "Wyłączony") << std::endl;
         }
     }
-
+    /**
+     * @brief Resetuje kamerę do ustawień domyślnych.
+     */
     void resetCamera() {
         camX = 0.0f;
         camY = 0.0f;
@@ -240,7 +300,9 @@ public:
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         std::cout << "Kamera zresetowana do pozycji domyślnej" << std::endl;
     }
-
+    /**
+    * @brief Konfiguruje oświetlenie OpenGL.
+    */
     // === METODY OŚWIETLENIA ===
     void setupLighting() {
         if (lightingEnabled) {
@@ -267,18 +329,24 @@ public:
             glDisable(GL_LIGHT0);
         }
     }
-
+    /**
+     * @brief Aktualizuje pozycję światła.
+     */
     void updateLightPosition() {
         // Aktualizacja pozycji światła (można dodać animację)
         glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
     }
-
+    /**
+     * @brief Włącza lub wyłącza oświetlenie.
+     */
     void toggleLighting() {
         lightingEnabled = !lightingEnabled;
         setupLighting();
         std::cout << "Oświetlenie: " << (lightingEnabled ? "Włączone" : "Wyłączone") << std::endl;
     }
-
+    /**
+   * @brief Ustawia pozycję światła.
+   */
     void setLightPosition(float x, float y, float z, float w = 0.0f) {
         lightPosition[0] = x;
         lightPosition[1] = y;
@@ -288,14 +356,18 @@ public:
             glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
         }
     }
-
+    /**
+    * @brief Ustawia kolor światła.
+    */
     void setLightColor(float r, float g, float b, float a = 1.0f) {
         lightDiffuse[0] = r; lightDiffuse[1] = g; lightDiffuse[2] = b; lightDiffuse[3] = a;
         if (lightingEnabled) {
             glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
         }
     }
-
+    /**
+     * @brief Przełącza tryb cieniowania (flat/smooth).
+     */
     // === METODY CIENIOWANIA ===
     void toggleShading() {
         smoothShading = !smoothShading;
@@ -308,15 +380,23 @@ public:
             std::cout << "Cieniowanie: Płaskie (flat)" << std::endl;
         }
     }
-
+    /**
+     * @brief Sprawdza, czy włączone jest cieniowanie Gourauda.
+     * @return true jeśli smooth shading.
+     */
     bool isSmoothShading() const { return smoothShading; }
 
+     /**
+      * @brief Włącza/wyłącza rysowanie osi świata.
+      */
     // === METODY OSI ===
     void toggleAxes() {
         showAxes = !showAxes;
         std::cout << "Osie współrzędnych: " << (showAxes ? "Widoczne" : "Ukryte") << std::endl;
     }
-
+    /**
+     * @brief Rysuje osie świata.
+     */
     void drawAxes() {
         if (!showAxes) return;
 
@@ -354,10 +434,17 @@ public:
     float getYaw() const { return yaw; }
     float getPitch() const { return pitch; }
     bool isRotating() const { return rotateCamera; }
-
+    /**
+    * @brief Ustawia prędkość ruchu kamery.
+    */
     void setMoveSpeed(float speed) { moveSpeed = speed; }
+    /**
+    * @brief Ustawia czułość myszy.
+    */
     void setMouseSensitivity(float sens) { mouseSensitivity = sens; }
-
+    /**
+    * @brief Wypisuje informacje o stanie gracza.
+    */
     void printPlayerInfo() const {
         std::cout << "\n=== INFORMACJE GRACZA ===\n";
         std::cout << "Tryb kamery: ";
@@ -376,39 +463,67 @@ public:
         std::cout << "Czułość myszy: " << mouseSensitivity << std::endl;
     }
 };
-
-// ============== KLASA ENGINE ==============
+/**
+ * @class Engine
+ * @brief Główna klasa silnika 3D.
+ *
+ * Odpowiada za:
+ * - inicjalizację GLFW i OpenGL
+ * - zarządzanie oknem i kontekstem
+ * - obsługę projekcji (perspektywicznej i ortogonalnej)
+ * - pętlę główną aplikacji
+ * - rysowanie obiektów 3D
+ * - obsługę wejścia (klawiatura, mysz)
+ * - współpracę z klasą Player
+ */
 class Engine {
 private:
+    /// Wskaźnik na okno GLFW
     GLFWwindow* window;
+
+    /// Aktualna szerokość i wysokość okna
     int width, height;
-    bool isFullscreen;
-    bool isPerspective;
-    bool vsyncEnabled;
-    bool depthTestEnabled;
+
+    /// Flagi trybów silnika
+    bool isFullscreen;      ///< Czy pełny ekran
+    bool isPerspective;     ///< Czy rzutowanie perspektywiczne
+    bool vsyncEnabled;      ///< Czy VSync jest włączony
+    bool depthTestEnabled;  ///< Czy test głębokości jest włączony
+
+    /// Kolor czyszczenia ekranu (RGBA)
     float clearColor[4];
+
+    /// Docelowa liczba klatek na sekundę
     int targetFPS;
+
+    /// Czas ostatniej klatki
     double lastFrameTime;
 
-    // Matryca projekcji
+    /// Macierze projekcji
     float projectionMatrix[16];
     float orthoMatrix[16];
     float perspectiveMatrix[16];
 
-    // Player
+    /// Wskaźnik na obiekt gracza/kamery
     Player* player;
 
-    // Zmienne dla kuli
+    /// Parametry geometrii kuli
     int sphereSegments = 16;
     const int minSegments = 8;
     const int maxSegments = 64;
     const int baseSegments = 16;
 
+    /**
+     * @brief Ustawia macierz jednostkową.
+     * @param matrix Wskaźnik na tablicę 4x4
+     */
     void setIdentityMatrix(float* matrix) {
         for (int i = 0; i < 16; i++) matrix[i] = 0.0f;
         matrix[0] = matrix[5] = matrix[10] = matrix[15] = 1.0f;
     }
-
+    /**
+    * @brief Tworzy macierz rzutowania ortogonalnego.
+    */
     void setOrthographic(float left, float right, float bottom, float top, float near, float far) {
         setIdentityMatrix(orthoMatrix);
         orthoMatrix[0] = 2.0f / (right - left);
@@ -418,7 +533,9 @@ private:
         orthoMatrix[13] = -(top + bottom) / (top - bottom);
         orthoMatrix[14] = -(far + near) / (far - near);
     }
-
+    /**
+     * @brief Tworzy macierz rzutowania perspektywicznego.
+     */
     void setPerspective(float fov, float aspect, float near, float far) {
         setIdentityMatrix(perspectiveMatrix);
         float f = 1.0f / tan(fov * 3.14159f / 360.0f);
@@ -429,13 +546,17 @@ private:
         perspectiveMatrix[14] = (2.0f * far * near) / (near - far);
         perspectiveMatrix[15] = 0.0f;
     }
-
+    /**
+     * @brief Wgrywa aktualną macierz projekcji do OpenGL.
+     */
     void applyProjectionMatrix() {
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(projectionMatrix);
         glMatrixMode(GL_MODELVIEW);
     }
-
+    /**
+    * @brief Aktualizuje rzutowanie na podstawie aktualnych ustawień.
+    */
     void updateProjection() {
         float aspect = (float)width / (float)height;
 
@@ -451,6 +572,12 @@ private:
     }
 
 public:
+    /**
+    * @brief Konstruktor silnika.
+    * @param w Szerokość okna
+    * @param h Wysokość okna
+    * @param title Tytuł okna
+    */
     Engine(int w = 800, int h = 600, const char* title = "3D Engine")
         : width(w), height(h), isFullscreen(false), isPerspective(true),
         vsyncEnabled(true), depthTestEnabled(true), targetFPS(60),
@@ -502,11 +629,15 @@ public:
 
         printControlInfo();
     }
-
+    /**
+     * @brief Destruktor silnika.
+     */
     ~Engine() {
         shutdown();
     }
-
+    /**
+     * @brief Zamyka silnik i zwalnia zasoby.
+     */
     void shutdown() {
         std::cout << "Zamykanie silnika..." << std::endl;
         if (player) delete player;
@@ -514,19 +645,25 @@ public:
         glfwTerminate();
         std::cout << "Silnik zamknięty." << std::endl;
     }
-
+    /**
+     * @brief Ustawia kolor tła.
+     */
     void setClearColor(float r, float g, float b, float a = 1.0f) {
         clearColor[0] = r;
         clearColor[1] = g;
         clearColor[2] = b;
         clearColor[3] = a;
     }
-
+    /**
+    * @brief Czyści bufor koloru i głębokości.
+    */
     void clearScreen() {
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
-
+    /**
+     * @brief Przełącza tryb pełnoekranowy.
+     */
     void toggleFullscreen() {
         isFullscreen = !isFullscreen;
         GLFWmonitor* monitor = glfwGetPrimaryMonitor();
@@ -546,27 +683,34 @@ public:
         updateProjection();
         std::cout << "Tryb: " << (isFullscreen ? "Pełny ekran" : "Okno") << std::endl;
     }
-
+    /**
+     * @brief Przełącza rzutowanie perspektywiczne / ortogonalne.
+     */
     void toggleProjection() {
         isPerspective = !isPerspective;
         updateProjection();
         std::cout << "Rzutowanie: " << (isPerspective ? "Perspektywiczne" : "Ortogonalne") << std::endl;
     }
-
+    /**
+    * @brief Włącza lub wyłącza synchronizację pionową.
+    */
     void toggleVSync() {
         vsyncEnabled = !vsyncEnabled;
         glfwSwapInterval(vsyncEnabled ? 1 : 0);
         std::cout << "VSync: " << (vsyncEnabled ? "Włączony" : "Wyłączony") << std::endl;
     }
-
+    /**
+    * @brief Włącza lub wyłącza test głębokości.
+    */
     void toggleDepthTest() {
         depthTestEnabled = !depthTestEnabled;
         if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
         else glDisable(GL_DEPTH_TEST);
         std::cout << "Test głębokości: " << (depthTestEnabled ? "Włączony" : "Wyłączony") << std::endl;
     }
-
-    // Funkcje dla kuli
+    /**
+     * @brief Zwiększa szczegółowość kuli.
+     */
     void increaseSphereDetail() {
         if (sphereSegments * 2 <= maxSegments) {
             sphereSegments *= 2;
@@ -577,7 +721,9 @@ public:
             std::cout << "Osiągnięto maksymalną liczbę segmentów: " << maxSegments << std::endl;
         }
     }
-
+    /**
+     * @brief Zmniejsza szczegółowość kuli.
+     */
     void decreaseSphereDetail() {
         if (sphereSegments / 2 >= minSegments) {
             sphereSegments /= 2;
@@ -588,18 +734,24 @@ public:
             std::cout << "Osiągnięto minimalną liczbę segmentów: " << minSegments << std::endl;
         }
     }
-
+    /**
+    * @brief Resetuje szczegółowość kuli do wartości domyślnej.
+    */
     void resetSphereDetail() {
         sphereSegments = baseSegments;
         std::cout << "Zresetowano liczbę segmentów kuli: " << sphereSegments;
         std::cout << " (poligony: ~" << (sphereSegments * sphereSegments * 2) << ")" << std::endl;
     }
-
+    /**
+     * @brief Ustawia docelową liczbę FPS.
+     */
     void setTargetFPS(int fps) {
         targetFPS = fps;
         std::cout << "Celowa liczba FPS: " << targetFPS << std::endl;
     }
-
+    /**
+     * @brief Ogranicza liczbę klatek na sekundę.
+     */
     void limitFPS() {
         double targetFrameTime = 1.0 / targetFPS;
         double currentTime = glfwGetTime();
@@ -613,8 +765,9 @@ public:
             }
         }
     }
-
-    // Funkcje rysowania
+    /**
+     * @brief Rysuje sześcian.
+     */
     void drawCube(float x, float y, float z, float size = 1.0f) {
         glPushMatrix();
         glTranslatef(x, y, z);
@@ -678,7 +831,9 @@ public:
         glPopMatrix();
     }
 
-
+    /**
+     * @brief Rysuje piramidę.
+     */
     void drawPyramid(float x, float y, float z, float size = 1.0f) {
         glPushMatrix();
         glTranslatef(x, y, z);
@@ -707,7 +862,9 @@ public:
 
         glPopMatrix();
     }
-
+    /**
+    * @brief Rysuje kulę z regulowaną liczbą segmentów.
+    */
     void drawSphere(float x, float y, float z, float radius = 1.0f) {
         glPushMatrix();
         glTranslatef(x, y, z);
@@ -756,6 +913,9 @@ public:
 
         glPopMatrix();
     }
+    /**
+     * @brief Wczytuje teksturę z pliku JPG.
+     */
     void LoadMyTexture() {
         BitmapHandler loader;
         if (loader.Load("textura.jpg")) { // Sprawdź czy nazwa pliku się zgadza!
@@ -784,7 +944,9 @@ public:
             std::cerr << "Blad: Nie znaleziono pliku JPG!" << std::endl;
         }
     }
-
+    /**
+     * @brief Główna pętla silnika.
+     */
     void run() {
         while (!glfwWindowShouldClose(window)) {
             double currentTime = glfwGetTime();
@@ -820,7 +982,9 @@ public:
             glfwPollEvents();
         }
     }
-
+    /**
+     * @brief Wyświetla informacje o sterowaniu.
+     */
     void printControlInfo() {
         std::cout << "\n=== KONTROLA SILNIKA 3D ===\n";
         std::cout << "STEROWANIE KLAWIATURĄ:\n";
@@ -863,39 +1027,53 @@ public:
         player->printPlayerInfo();
         std::cout << "=============================\n" << std::endl;
     }
-
-    // Statyczne callbacki
+    /**
+     * @brief Callback klawiatury GLFW.
+     */
     static void keyCallbackStatic(GLFWwindow* window, int key, int scancode, int action, int mods) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine && action == GLFW_PRESS) engine->keyCallback(key);
     }
-
+    /**
+    * @brief Callback kliknięcia myszy GLFW.
+     */
     static void mouseCallbackStatic(GLFWwindow* window, int button, int action, int mods) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine && action == GLFW_PRESS) engine->mouseCallback(button);
     }
-
+    /**
+     * @brief Callback scrolla myszy GLFW.
+     */
     static void scrollCallbackStatic(GLFWwindow* window, double xoffset, double yoffset) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine) engine->scrollCallback(xoffset, yoffset);
     }
-
+    /**
+    * @brief Callback zmiany rozmiaru okna.
+    */
     static void resizeCallbackStatic(GLFWwindow* window, int width, int height) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine) engine->resizeCallback(width, height);
     }
-
+    /**
+     * @brief Callback zamknięcia okna.
+     */
     static void closeCallbackStatic(GLFWwindow* window) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine) engine->closeCallback();
     }
-
+    /**
+     * @brief Callback ruchu myszy.
+     */
     static void mouseMoveCallbackStatic(GLFWwindow* window, double xpos, double ypos) {
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
         if (engine) engine->mouseMoveCallback(xpos, ypos);
     }
 
 private:
+    /**
+     * @brief Obsługuje klawiaturę.
+     */
     void keyCallback(int key) {
         switch (key) {
         case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(window, GLFW_TRUE); break;
@@ -930,7 +1108,9 @@ private:
         case GLFW_KEY_B: resetSphereDetail(); break;
         }
     }
-
+    /**
+     * @brief Obsługuje kliknięcia myszy.
+     */
     void mouseCallback(int button) {
         double x, y;
         glfwGetCursorPos(window, &x, &y);
@@ -940,11 +1120,15 @@ private:
         case GLFW_MOUSE_BUTTON_MIDDLE: std::cout << "Środkowy przycisk: (" << x << ", " << y << ")" << std::endl; break;
         }
     }
-
+    /**
+     * @brief Obsługuje scroll myszy.
+     */
     void scrollCallback(double xoffset, double yoffset) {
         player->handleMouseScroll(static_cast<float>(-yoffset));
     }
-
+    /**
+     * @brief Obsługuje zmianę rozmiaru okna.
+     */
     void resizeCallback(int w, int h) {
         width = w;
         height = h;
@@ -952,17 +1136,24 @@ private:
         updateProjection();
         std::cout << "Rozmiar okna: " << w << "x" << h << std::endl;
     }
-
+    /**
+     * @brief Obsługuje zamknięcie aplikacji.
+     */
     void closeCallback() {
         std::cout << "Zamykanie aplikacji..." << std::endl;
     }
-
+    /**
+     * @brief Obsługuje ruch myszy.
+     */
     void mouseMoveCallback(double xpos, double ypos) {
         player->handleMouseMove(xpos, ypos);
     }
 };
 
-
+/**
+ * @brief Punkt wejścia programu.
+ * @return Kod zakończenia aplikacji.
+ */
 int main() {
     setlocale(LC_CTYPE, "Polish");
     Engine engine(1024, 768, "3D Game Engine with Player Class");
