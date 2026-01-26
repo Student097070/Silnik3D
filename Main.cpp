@@ -12,6 +12,12 @@ using namespace std;
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "stb_image.h"
+GLuint myTexture; // Globalny identyfikator tekstury
+#include "BitmapHandler.h" // Upewnij się, że masz ten include
+
+
+
 // ============== KLASA PLAYER ==============
 class Player {
 public:
@@ -614,41 +620,64 @@ public:
         glTranslatef(x, y, z);
         glScalef(size, size, size);
 
+        // 1. Włączamy teksturowanie i wybieramy teksturę
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, myTexture);
+
+        // 2. Ustawiamy kolor na biały (inaczej tekstura będzie zabarwiona)
+        glColor3f(1.0f, 1.0f, 1.0f);
+
         glBegin(GL_QUADS);
+
         // Przód
         glNormal3f(0.0f, 0.0f, 1.0f);
-        glColor3f(0.0f, 0.0f, 1.0f);
-        glVertex3f(-0.5f, -0.5f, 0.5f); glVertex3f(0.5f, -0.5f, 0.5f);
-        glVertex3f(0.5f, 0.5f, 0.5f); glVertex3f(-0.5f, 0.5f, 0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+
         // Tył
         glNormal3f(0.0f, 0.0f, -1.0f);
-        glColor3f(0.0f, 1.0f, 0.0f);
-        glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(-0.5f, 0.5f, -0.5f);
-        glVertex3f(0.5f, 0.5f, -0.5f); glVertex3f(0.5f, -0.5f, -0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+
         // Góra
         glNormal3f(0.0f, 1.0f, 0.0f);
-        glColor3f(1.0f, 1.0f, 0.0f);
-        glVertex3f(-0.5f, 0.5f, -0.5f); glVertex3f(-0.5f, 0.5f, 0.5f);
-        glVertex3f(0.5f, 0.5f, 0.5f); glVertex3f(0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+
         // Dół
         glNormal3f(0.0f, -1.0f, 0.0f);
-        glColor3f(1.0f, 0.0f, 0.0f);
-        glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(0.5f, -0.5f, -0.5f);
-        glVertex3f(0.5f, -0.5f, 0.5f); glVertex3f(-0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+
         // Lewo
         glNormal3f(-1.0f, 0.0f, 0.0f);
-        glColor3f(0.0f, 1.0f, 1.0f);
-        glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(-0.5f, -0.5f, 0.5f);
-        glVertex3f(-0.5f, 0.5f, 0.5f); glVertex3f(-0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(-0.5f, -0.5f, -0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(-0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(-0.5f, 0.5f, 0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(-0.5f, 0.5f, -0.5f);
+
         // Prawo
         glNormal3f(1.0f, 0.0f, 0.0f);
-        glColor3f(1.0f, 0.0f, 1.0f);
-        glVertex3f(0.5f, -0.5f, -0.5f); glVertex3f(0.5f, 0.5f, -0.5f);
-        glVertex3f(0.5f, 0.5f, 0.5f); glVertex3f(0.5f, -0.5f, 0.5f);
+        glTexCoord2f(1.0f, 0.0f); glVertex3f(0.5f, -0.5f, -0.5f);
+        glTexCoord2f(1.0f, 1.0f); glVertex3f(0.5f, 0.5f, -0.5f);
+        glTexCoord2f(0.0f, 1.0f); glVertex3f(0.5f, 0.5f, 0.5f);
+        glTexCoord2f(0.0f, 0.0f); glVertex3f(0.5f, -0.5f, 0.5f);
+
         glEnd();
 
+        // Wyłączamy teksturowanie po narysowaniu obiektu
+        glDisable(GL_TEXTURE_2D);
         glPopMatrix();
     }
+
 
     void drawPyramid(float x, float y, float z, float size = 1.0f) {
         glPushMatrix();
@@ -727,13 +756,41 @@ public:
 
         glPopMatrix();
     }
+    void LoadMyTexture() {
+        BitmapHandler loader;
+        if (loader.Load("textura.jpg")) { // Sprawdź czy nazwa pliku się zgadza!
+            glGenTextures(1, &myTexture);
+            glBindTexture(GL_TEXTURE_2D, myTexture);
+
+            // Niezbędne parametry, aby tekstura nie była czarna
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+            // JPG nie ma kanału Alpha, więc wymuszamy GL_RGB
+            GLenum format = (loader.GetChannels() == 4) ? GL_RGBA : GL_RGB;
+
+            // Poprawka dla obrazów o wymiarach niebędących potęgą dwójki
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+            glTexImage2D(GL_TEXTURE_2D, 0, format,
+                loader.GetWidth(), loader.GetHeight(),
+                0, format, GL_UNSIGNED_BYTE, loader.GetData());
+
+            loader.Free();
+        }
+        else {
+            std::cerr << "Blad: Nie znaleziono pliku JPG!" << std::endl;
+        }
+    }
 
     void run() {
         while (!glfwWindowShouldClose(window)) {
             double currentTime = glfwGetTime();
             float deltaTime = static_cast<float>(currentTime - lastFrameTime);
             lastFrameTime = currentTime;
-
+            LoadMyTexture();
             player->updateStaticRotation(deltaTime);
             player->handleCameraMovement(deltaTime);
             limitFPS();
@@ -745,7 +802,6 @@ public:
             drawCube(-4.0f, 0.0f, 0.0f, 1.0f);
             drawPyramid(0.0f, 0.0f, 0.0f, 1.5f);
             drawSphere(4.0f, 0.0f, 0.0f, 1.5f);
-
             glDisable(GL_LIGHTING);
             glBegin(GL_LINES);
             glColor3f(0.5f, 0.5f, 0.5f);
@@ -905,6 +961,7 @@ private:
         player->handleMouseMove(xpos, ypos);
     }
 };
+
 
 int main() {
     setlocale(LC_CTYPE, "Polish");
